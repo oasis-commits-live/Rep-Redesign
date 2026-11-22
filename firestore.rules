@@ -1,0 +1,574 @@
+rules_version = '2';
+service cloud.firestore {
+  match /databases/{database}/documents {
+
+    // 1. Global Safety Net — default deny everything
+    match /{document=**} {
+      allow read, write: if false;
+    }
+
+    // ── Primitive Helpers ──
+    function isValidId(id) {
+      return id is string && id.size() >= 1 && id.size() <= 128 && id.matches('^[a-zA-Z0-9_\\-]+$');
+    }
+
+    function isValidUsername(u) {
+      return u is string && u.size() >= 3 && u.size() <= 20 && u.matches('^[a-z0-9._]+$');
+    }
+
+    function incoming() {
+      return request.resource.data;
+    }
+
+    function existing() {
+      return resource.data;
+    }
+
+    function isSignedIn() {
+      return request.auth != null;
+    }
+
+    function isVerifiedUser() {
+      return isSignedIn() && request.auth.token.email_verified == true;
+    }
+
+    function isOwner(userId) {
+      return isVerifiedUser() && request.auth.uid == userId;
+    }
+
+    function isValidCategory(cat) {
+      return cat is string && cat.size() <= 20 && cat in ['gym', 'calisthenics', 'animalflow'];
+    }
+
+    function isValidOptionalUrl(val) {
+      return val == null || (val is string && val.size() <= 2048 && (val.matches('^https://.*') || val.matches('^http://.*')));
+    }
+
+    function isValidOptionalCategory(val) {
+      return val == null || isValidCategory(val);
+    }
+
+    function isValidExerciseList(list) {
+      return list is list && list.size() <= 100 && (list.size() == 0 || list[0] is map);
+    }
+
+    // ── Entity Validation Blueprints ──
+
+    function isValidUserAccount(data, userId) {
+      return data.keys().hasAll(['userId', 'email', 'username', 'displayName', 'onboardingComplete', 'createdAt', 'updatedAt'])
+        && data.keys().hasOnly([
+          'userId', 'email', 'username', 'displayName', 'avatarUrl',
+          'onboardingComplete', 'preferredStyle', 'workoutFrequency',
+          'heightCm', 'weightKg', 'goal', 'createdAt', 'updatedAt'
+        ])
+        && data.userId is string && data.userId == request.auth.uid && data.userId == userId
+        && data.email is string && data.email.size() >= 3 && data.email.size() <= 254 && data.email == request.auth.token.email
+        && isValidUsername(data.username)
+        && data.displayName is string && data.displayName.size() >= 1 && data.displayName.size() <= 60
+        && (!('avatarUrl' in data) || isValidOptionalUrl(data.avatarUrl))
+        && data.onboardingComplete is bool
+        && (!('preferredStyle' in data) || isValidOptionalCategory(data.preferredStyle))
+        && (!('workoutFrequency' in data) || data.workoutFrequency == null || (data.workoutFrequency is string && data.workoutFrequency.size() <= 20))
+        && (!('heightCm' in data) || data.heightCm == null || (data.heightCm is number && data.heightCm >= 50 && data.heightCm <= 300))
+        && (!('weightKg' in data) || data.weightKg == null || (data.weightKg is number && data.weightKg >= 20 && data.weightKg <= 400))
+        && (!('goal' in data) || data.goal == null || (data.goal is string && data.goal.size() <= 40))
+        && data.createdAt is timestamp
+        && data.updatedAt is timestamp;
+    }
+
+    function isValidUsernameClaim(data, username) {
+      return data.keys().hasAll(['username', 'userId', 'createdAt'])
+        && data.keys().hasOnly(['username', 'userId', 'createdAt'])
+        && isValidUsername(data.username) && data.username == username
+        && data.userId is string && isValidId(data.userId) && data.userId == request.auth.uid
+        && data.createdAt is timestamp;
+    }
+
+    function isValidPublicProfile(data, userId) {
+      return data.keys().hasAll(['userId', 'username', 'displayName', 'bio', 'visibility', 'joinedAt', 'createdAt', 'updatedAt'])
+        && data.keys().hasOnly([
+          'userId', 'username', 'displayName', 'avatarUrl', 'preferredStyle',
+          'bio', 'visibility', 'workoutCount', 'totalVolume', 'totalDuration',
+          'totalSets', 'totalReps', 'joinedAt', 'createdAt', 'updatedAt'
+        ])
+        && data.userId is string && isValidId(data.userId) && data.userId == request.auth.uid && data.userId == userId
+        && isValidUsername(data.username)
+        && data.displayName is string && data.displayName.size() >= 1 && data.displayName.size() <= 60
+        && (!('avatarUrl' in data) || isValidOptionalUrl(data.avatarUrl))
+        && (!('preferredStyle' in data) || isValidOptionalCategory(data.preferredStyle))
+        && data.bio is string && data.bio.size() <= 240
+        && data.visibility is string && data.visibility == 'public'
+        && (!('workoutCount' in data) || (data.workoutCount is number && data.workoutCount >= 0))
+        && (!('totalVolume' in data) || (data.totalVolume is number && data.totalVolume >= 0))
+        && (!('totalDuration' in data) || (data.totalDuration is number && data.totalDuration >= 0))
+        && (!('totalSets' in data) || (data.totalSets is number && data.totalSets >= 0))
+        && (!('totalReps' in data) || (data.totalReps is number && data.totalReps >= 0))
+        && data.joinedAt is string && data.joinedAt.size() <= 64
+        && data.createdAt is timestamp
+        && data.updatedAt is timestamp;
+    }
+
+    function isValidWorkoutTemplate(data, userId, templateId) {
+      return data.keys().hasAll(['id', 'userId', 'name', 'category', 'exercises', 'createdAt', 'updatedAt'])
+        && data.keys().hasOnly(['id', 'userId', 'name', 'category', 'exercises', 'createdAt', 'updatedAt'])
+        && data.id is string && isValidId(data.id) && data.id == templateId
+        && data.userId is string && data.userId == request.auth.uid && data.userId == userId
+        && data.name is string && data.name.size() >= 1 && data.name.size() <= 100
+        && isValidCategory(data.category)
+        && isValidExerciseList(data.exercises)
+        && data.createdAt is string && data.createdAt.size() <= 64
+        && data.updatedAt is timestamp;
+    }
+
+    function isValidWorkoutSession(data, userId, sessionId) {
+      return data.keys().hasAll(['id', 'userId', 'name', 'category', 'startedAt', 'exercises', 'updatedAt'])
+        && data.keys().hasOnly(['id', 'userId', 'templateId', 'name', 'category', 'startedAt', 'completedAt', 'exercises', 'updatedAt'])
+        && data.id is string && isValidId(data.id) && data.id == sessionId
+        && data.userId is string && data.userId == request.auth.uid && data.userId == userId
+        && (!('templateId' in data) || data.templateId == null || (data.templateId is string && data.templateId.size() <= 128))
+        && data.name is string && data.name.size() >= 1 && data.name.size() <= 100
+        && isValidCategory(data.category)
+        && data.startedAt is string && data.startedAt.size() <= 64
+        && (!('completedAt' in data) || data.completedAt == null || (data.completedAt is string && data.completedAt.size() <= 64))
+        && isValidExerciseList(data.exercises)
+        && data.updatedAt is timestamp;
+    }
+
+    function isValidCustomExercise(data, userId, exerciseId) {
+      return data.keys().hasAll(['id', 'userId', 'name', 'category', 'muscleGroup', 'updatedAt'])
+        && data.keys().hasOnly(['id', 'userId', 'name', 'category', 'muscleGroup', 'equipment', 'isTimeBased', 'instructions', 'updatedAt'])
+        && data.id is string && isValidId(data.id) && data.id == exerciseId
+        && data.userId is string && data.userId == request.auth.uid && data.userId == userId
+        && data.name is string && data.name.size() >= 1 && data.name.size() <= 100
+        && isValidCategory(data.category)
+        && data.muscleGroup is string && data.muscleGroup.size() >= 1 && data.muscleGroup.size() <= 60
+        && (!('equipment' in data) || data.equipment == null || (data.equipment is string && data.equipment.size() <= 60))
+        && (!('isTimeBased' in data) || data.isTimeBased is bool)
+        && (!('instructions' in data) || data.instructions == null || (data.instructions is string && data.instructions.size() <= 1000))
+        && data.updatedAt is timestamp;
+    }
+
+    function isValidSavedTemplate(data, userId, savedId) {
+      return data.keys().hasAll(['id', 'userId', 'originalTemplateId', 'originalOwnerId', 'originalOwnerName', 'templateName', 'category', 'exercises', 'exerciseCount', 'savedAt', 'updatedAt'])
+        && data.keys().hasOnly(['id', 'userId', 'originalTemplateId', 'originalOwnerId', 'originalOwnerName', 'originalOwnerAvatar', 'templateName', 'category', 'exercises', 'exerciseCount', 'savedAt', 'updatedAt'])
+        && data.id is string && isValidId(data.id) && data.id == savedId
+        && data.userId is string && data.userId == request.auth.uid && data.userId == userId
+        && data.originalTemplateId is string && data.originalTemplateId.size() <= 128
+        && data.originalOwnerId is string && data.originalOwnerId.size() <= 128
+        && data.originalOwnerName is string && data.originalOwnerName.size() <= 60
+        && (!('originalOwnerAvatar' in data) || isValidOptionalUrl(data.originalOwnerAvatar))
+        && data.templateName is string && data.templateName.size() >= 1 && data.templateName.size() <= 100
+        && isValidCategory(data.category)
+        && isValidExerciseList(data.exercises)
+        && data.exerciseCount is number && data.exerciseCount >= 0 && data.exerciseCount <= 100
+        && data.savedAt is string && data.savedAt.size() <= 64
+        && data.updatedAt is timestamp;
+    }
+
+    function isValidNotification(data, userId, notificationId) {
+      return data.keys().hasAll(['id', 'recipientId', 'type', 'fromUserId', 'read', 'createdAt'])
+        && data.keys().hasOnly([
+          'id', 'recipientId', 'type', 'fromUserId', 'fromDisplayName',
+          'fromAvatarUrl', 'activityId', 'activityName', 'commentText',
+          'title', 'message', 'read', 'createdAt'
+        ])
+        && data.id is string && isValidId(data.id) && data.id == notificationId
+        && data.recipientId is string && data.recipientId == userId
+        && data.type is string && data.type in ['follow_back', 'like', 'comment', 'app_update']
+        && data.fromUserId is string && isValidId(data.fromUserId)
+        && (!('fromDisplayName' in data) || data.fromDisplayName == null || (data.fromDisplayName is string && data.fromDisplayName.size() <= 60))
+        && (!('fromAvatarUrl' in data) || isValidOptionalUrl(data.fromAvatarUrl))
+        && (!('activityId' in data) || data.activityId == null || (data.activityId is string && data.activityId.size() <= 128))
+        && (!('activityName' in data) || data.activityName == null || (data.activityName is string && data.activityName.size() <= 100))
+        && (!('commentText' in data) || data.commentText == null || (data.commentText is string && data.commentText.size() <= 200))
+        && (!('title' in data) || data.title == null || (data.title is string && data.title.size() <= 100))
+        && (!('message' in data) || data.message == null || (data.message is string && data.message.size() <= 240))
+        && data.read is bool
+        && data.createdAt is timestamp;
+    }
+
+    function isValidFollowEdge(data, followId) {
+      return data.keys().hasAll(['followerId', 'followingId', 'visibility', 'createdAt'])
+        && data.keys().hasOnly(['followerId', 'followingId', 'visibility', 'createdAt'])
+        && data.followerId is string && isValidId(data.followerId) && data.followerId == request.auth.uid
+        && data.followingId is string && isValidId(data.followingId) && data.followingId != request.auth.uid
+        && followId == data.followerId + '_' + data.followingId
+        && data.visibility is string && data.visibility == 'public'
+        && data.createdAt is timestamp;
+    }
+
+    function isValidActivityPost(data, activityId) {
+      return data.keys().hasAll([
+          'id', 'userId', 'displayName', 'sessionName', 'category', 'completedAt',
+          'exerciseCount', 'totalSets', 'totalVolume', 'durationMinutes', 'exercises',
+          'postedAt', 'visibility', 'likesCount', 'commentsCount', 'createdAt', 'updatedAt'
+        ])
+        && data.keys().hasOnly([
+          'id', 'userId', 'displayName', 'avatarUrl', 'sessionName', 'title', 'description',
+          'category', 'completedAt', 'exerciseCount', 'totalSets', 'totalVolume',
+          'durationMinutes', 'exercises', 'postedAt', 'mediaUrl', 'visibility',
+          'likesCount', 'commentsCount', 'createdAt', 'updatedAt'
+        ])
+        && data.id is string && isValidId(data.id) && data.id == activityId
+        && data.userId is string && isValidId(data.userId)
+        && data.displayName is string && data.displayName.size() >= 1 && data.displayName.size() <= 60
+        && (!('avatarUrl' in data) || isValidOptionalUrl(data.avatarUrl))
+        && data.sessionName is string && data.sessionName.size() >= 1 && data.sessionName.size() <= 100
+        && (!('title' in data) || data.title == null || (data.title is string && data.title.size() <= 120))
+        && (!('description' in data) || data.description == null || (data.description is string && data.description.size() <= 500))
+        && isValidCategory(data.category)
+        && data.completedAt is string && data.completedAt.size() <= 64
+        && data.exerciseCount is number && data.exerciseCount >= 0 && data.exerciseCount <= 100
+        && data.totalSets is number && data.totalSets >= 0 && data.totalSets <= 1000
+        && data.totalVolume is number && data.totalVolume >= 0
+        && data.durationMinutes is number && data.durationMinutes >= 0 && data.durationMinutes <= 1440
+        && isValidExerciseList(data.exercises)
+        && data.postedAt is string && data.postedAt.size() <= 64
+        && (!('mediaUrl' in data) || isValidOptionalUrl(data.mediaUrl))
+        && data.visibility is string && data.visibility == 'public'
+        && data.likesCount is number && data.likesCount >= 0
+        && data.commentsCount is number && data.commentsCount >= 0
+        && data.createdAt is timestamp
+        && data.updatedAt is timestamp;
+    }
+
+    function isValidActivityLike(data, likerId) {
+      return data.keys().hasAll(['userId', 'displayName', 'visibility', 'createdAt'])
+        && data.keys().hasOnly(['userId', 'displayName', 'avatarUrl', 'visibility', 'createdAt'])
+        && data.userId is string && isValidId(data.userId) && data.userId == request.auth.uid && data.userId == likerId
+        && data.displayName is string && data.displayName.size() >= 1 && data.displayName.size() <= 60
+        && (!('avatarUrl' in data) || isValidOptionalUrl(data.avatarUrl))
+        && data.visibility is string && data.visibility == 'public'
+        && data.createdAt is timestamp;
+    }
+
+    function isValidActivityComment(data, commentId) {
+      return data.keys().hasAll(['commentId', 'userId', 'displayName', 'text', 'visibility', 'createdAt'])
+        && data.keys().hasOnly(['commentId', 'userId', 'displayName', 'avatarUrl', 'text', 'visibility', 'createdAt'])
+        && data.commentId is string && isValidId(data.commentId) && data.commentId == commentId
+        && data.userId is string && isValidId(data.userId) && data.userId == request.auth.uid
+        && data.displayName is string && data.displayName.size() >= 1 && data.displayName.size() <= 60
+        && (!('avatarUrl' in data) || isValidOptionalUrl(data.avatarUrl))
+        && data.text is string && data.text.size() >= 1 && data.text.size() <= 500
+        && data.visibility is string && data.visibility == 'public'
+        && data.createdAt is timestamp;
+    }
+
+    function isValidExerciseCatalogPack(data, packId) {
+      return data.keys().hasAll(['packId', 'category', 'version', 'visibility', 'exercises', 'updatedBy', 'updatedAt'])
+        && data.keys().hasOnly(['packId', 'category', 'version', 'visibility', 'exercises', 'updatedBy', 'updatedAt'])
+        && data.packId is string && isValidId(data.packId) && data.packId == packId
+        && packId in ['gym_1', 'gym_2', 'gym_3', 'calisthenics_1', 'calisthenics_2', 'animalflow_1', 'animalflow_2']
+        && isValidCategory(data.category)
+        && data.version is number && data.version >= 1 && data.version <= 100
+        && data.visibility is string && data.visibility == 'public'
+        && isValidExerciseList(data.exercises)
+        && data.updatedBy is string && isValidId(data.updatedBy) && data.updatedBy == request.auth.uid
+        && data.updatedAt is timestamp;
+    }
+
+    // ── /users/{userId} (Private PII & Account Preferences) ──
+    match /users/{userId} {
+      allow get: if isOwner(userId) && isValidId(userId);
+      allow list: if false;
+      allow create: if isOwner(userId)
+        && isValidId(userId)
+        && isValidUserAccount(incoming(), userId)
+        && incoming().createdAt == request.time
+        && incoming().updatedAt == request.time
+        && existsAfter(/databases/$(database)/documents/usernames/$(incoming().username))
+        && getAfter(/databases/$(database)/documents/usernames/$(incoming().username)).data.userId == request.auth.uid;
+      allow update: if isOwner(userId)
+        && isValidId(userId)
+        && isValidUserAccount(incoming(), userId)
+        && incoming().userId == existing().userId
+        && incoming().username == existing().username
+        && incoming().createdAt == existing().createdAt
+        && incoming().updatedAt == request.time
+        && incoming().diff(existing()).affectedKeys().hasOnly([
+          'displayName', 'avatarUrl', 'onboardingComplete', 'preferredStyle',
+          'workoutFrequency', 'heightCm', 'weightKg', 'goal', 'email', 'updatedAt'
+        ]);
+      allow delete: if isOwner(userId) && isValidId(userId);
+
+      // Subcollection: Private workout templates
+      match /templates/{templateId} {
+        allow get: if isOwner(userId) && isValidId(userId) && isValidId(templateId)
+          && exists(/databases/$(database)/documents/users/$(userId));
+        allow list: if isOwner(userId) && resource.data.userId == request.auth.uid;
+        allow create: if isOwner(userId)
+          && isValidId(userId) && isValidId(templateId)
+          && isValidWorkoutTemplate(incoming(), userId, templateId)
+          && incoming().updatedAt == request.time
+          && exists(/databases/$(database)/documents/users/$(userId));
+        allow update: if isOwner(userId)
+          && isValidId(userId) && isValidId(templateId)
+          && isValidWorkoutTemplate(incoming(), userId, templateId)
+          && incoming().id == existing().id
+          && incoming().userId == existing().userId
+          && incoming().createdAt == existing().createdAt
+          && incoming().updatedAt == request.time
+          && incoming().diff(existing()).affectedKeys().hasOnly(['name', 'category', 'exercises', 'updatedAt'])
+          && exists(/databases/$(database)/documents/users/$(userId));
+        allow delete: if isOwner(userId) && isValidId(userId) && isValidId(templateId)
+          && exists(/databases/$(database)/documents/users/$(userId));
+      }
+
+      // Subcollection: Private workout sessions
+      match /sessions/{sessionId} {
+        allow get: if isOwner(userId) && isValidId(userId) && isValidId(sessionId)
+          && exists(/databases/$(database)/documents/users/$(userId));
+        allow list: if isOwner(userId) && resource.data.userId == request.auth.uid;
+        allow create: if isOwner(userId)
+          && isValidId(userId) && isValidId(sessionId)
+          && isValidWorkoutSession(incoming(), userId, sessionId)
+          && incoming().updatedAt == request.time
+          && exists(/databases/$(database)/documents/users/$(userId));
+        allow update: if isOwner(userId)
+          && isValidId(userId) && isValidId(sessionId)
+          && isValidWorkoutSession(incoming(), userId, sessionId)
+          && incoming().id == existing().id
+          && incoming().userId == existing().userId
+          && incoming().startedAt == existing().startedAt
+          && incoming().updatedAt == request.time
+          && incoming().diff(existing()).affectedKeys().hasOnly(['name', 'category', 'completedAt', 'exercises', 'templateId', 'updatedAt'])
+          && exists(/databases/$(database)/documents/users/$(userId));
+        allow delete: if isOwner(userId) && isValidId(userId) && isValidId(sessionId)
+          && exists(/databases/$(database)/documents/users/$(userId));
+      }
+
+      // Subcollection: Private custom exercises
+      match /customExercises/{exerciseId} {
+        allow get: if isOwner(userId) && isValidId(userId) && isValidId(exerciseId)
+          && exists(/databases/$(database)/documents/users/$(userId));
+        allow list: if isOwner(userId) && resource.data.userId == request.auth.uid;
+        allow create: if isOwner(userId)
+          && isValidId(userId) && isValidId(exerciseId)
+          && isValidCustomExercise(incoming(), userId, exerciseId)
+          && incoming().updatedAt == request.time
+          && exists(/databases/$(database)/documents/users/$(userId));
+        allow update: if isOwner(userId)
+          && isValidId(userId) && isValidId(exerciseId)
+          && isValidCustomExercise(incoming(), userId, exerciseId)
+          && incoming().id == existing().id
+          && incoming().userId == existing().userId
+          && incoming().updatedAt == request.time
+          && incoming().diff(existing()).affectedKeys().hasOnly(['name', 'category', 'muscleGroup', 'equipment', 'isTimeBased', 'instructions', 'updatedAt'])
+          && exists(/databases/$(database)/documents/users/$(userId));
+        allow delete: if isOwner(userId) && isValidId(userId) && isValidId(exerciseId)
+          && exists(/databases/$(database)/documents/users/$(userId));
+      }
+
+      // Subcollection: Bookmarked community templates
+      match /savedTemplates/{savedId} {
+        allow get: if isOwner(userId) && isValidId(userId) && isValidId(savedId)
+          && exists(/databases/$(database)/documents/users/$(userId));
+        allow list: if isOwner(userId) && resource.data.userId == request.auth.uid;
+        allow create: if isOwner(userId)
+          && isValidId(userId) && isValidId(savedId)
+          && isValidSavedTemplate(incoming(), userId, savedId)
+          && incoming().updatedAt == request.time
+          && exists(/databases/$(database)/documents/users/$(userId));
+        allow update: if false;
+        allow delete: if isOwner(userId) && isValidId(userId) && isValidId(savedId)
+          && exists(/databases/$(database)/documents/users/$(userId));
+      }
+
+      // Subcollection: Social notifications
+      match /notifications/{notificationId} {
+        allow get: if isOwner(userId) && isValidId(userId) && isValidId(notificationId)
+          && exists(/databases/$(database)/documents/users/$(userId));
+        allow list: if isOwner(userId) && resource.data.recipientId == request.auth.uid;
+        allow create: if isVerifiedUser()
+          && isValidId(userId) && isValidId(notificationId)
+          && isValidNotification(incoming(), userId, notificationId)
+          && incoming().fromUserId == request.auth.uid
+          && incoming().read == false
+          && incoming().createdAt == request.time
+          && exists(/databases/$(database)/documents/profiles/$(userId));
+        allow update: if isOwner(userId)
+          && isValidId(userId) && isValidId(notificationId)
+          && isValidNotification(incoming(), userId, notificationId)
+          && incoming().id == existing().id
+          && incoming().recipientId == existing().recipientId
+          && incoming().fromUserId == existing().fromUserId
+          && incoming().createdAt == existing().createdAt
+          && incoming().diff(existing()).affectedKeys().hasOnly(['read'])
+          && exists(/databases/$(database)/documents/users/$(userId));
+        allow delete: if isOwner(userId) && isValidId(userId) && isValidId(notificationId)
+          && exists(/databases/$(database)/documents/users/$(userId));
+      }
+    }
+
+    // ── /usernames/{username} (PII-free uniqueness lock) ──
+    match /usernames/{username} {
+      allow get: if isVerifiedUser() && isValidUsername(username);
+      allow list: if false;
+      allow create: if isVerifiedUser()
+        && isValidUsername(username)
+        && isValidUsernameClaim(incoming(), username)
+        && incoming().createdAt == request.time;
+      allow update: if false;
+      allow delete: if isVerifiedUser()
+        && isValidUsername(username)
+        && existing().userId == request.auth.uid;
+    }
+
+    // ── /profiles/{userId} (Public Community Profiles — NO PII) ──
+    match /profiles/{userId} {
+      allow get: if isVerifiedUser() && isValidId(userId);
+      allow list: if isVerifiedUser() && resource.data.visibility == 'public';
+      allow create: if isOwner(userId)
+        && isValidId(userId)
+        && isValidPublicProfile(incoming(), userId)
+        && incoming().createdAt == request.time
+        && incoming().updatedAt == request.time
+        && existsAfter(/databases/$(database)/documents/usernames/$(incoming().username))
+        && getAfter(/databases/$(database)/documents/usernames/$(incoming().username)).data.userId == request.auth.uid;
+      allow update: if isOwner(userId)
+        && isValidId(userId)
+        && isValidPublicProfile(incoming(), userId)
+        && incoming().userId == existing().userId
+        && incoming().username == existing().username
+        && incoming().joinedAt == existing().joinedAt
+        && incoming().createdAt == existing().createdAt
+        && incoming().updatedAt == request.time
+        && incoming().diff(existing()).affectedKeys().hasOnly([
+          'displayName', 'avatarUrl', 'preferredStyle', 'bio',
+          'workoutCount', 'totalVolume', 'totalDuration', 'totalSets', 'totalReps', 'updatedAt'
+        ]);
+      allow delete: if isOwner(userId) && isValidId(userId);
+    }
+
+    // ── /follows/{followId} (Public directed follow edges) ──
+    match /follows/{followId} {
+      allow get: if isVerifiedUser() && isValidId(followId);
+      allow list: if isVerifiedUser() && resource.data.visibility == 'public';
+      allow create: if isVerifiedUser()
+        && isValidId(followId)
+        && isValidFollowEdge(incoming(), followId)
+        && incoming().createdAt == request.time
+        && exists(/databases/$(database)/documents/profiles/$(incoming().followingId));
+      allow update: if false;
+      allow delete: if isVerifiedUser()
+        && isValidId(followId)
+        && existing().followerId == request.auth.uid;
+    }
+
+    // ── /activities/{activityId} (Community Feed Posts — NO PII) ──
+    match /activities/{activityId} {
+      allow get: if isVerifiedUser() && isValidId(activityId);
+      allow list: if isVerifiedUser() && resource.data.visibility == 'public';
+      allow create: if isVerifiedUser()
+        && isValidId(activityId)
+        && isValidActivityPost(incoming(), activityId)
+        && incoming().userId == request.auth.uid
+        && incoming().likesCount == 0
+        && incoming().commentsCount == 0
+        && incoming().createdAt == request.time
+        && incoming().updatedAt == request.time
+        && exists(/databases/$(database)/documents/profiles/$(request.auth.uid));
+      allow update: if isVerifiedUser()
+        && isValidId(activityId)
+        && isValidActivityPost(incoming(), activityId)
+        && incoming().id == existing().id
+        && incoming().userId == existing().userId
+        && incoming().createdAt == existing().createdAt
+        && incoming().updatedAt == request.time
+        && (
+          // Action 1: Owner edits caption/details
+          (
+            existing().userId == request.auth.uid
+            && incoming().diff(existing()).affectedKeys().hasOnly(['title', 'description', 'displayName', 'avatarUrl', 'mediaUrl', 'updatedAt'])
+          ) ||
+          // Action 2: Atomic like increment/decrement synced with /likes/{uid}
+          (
+            incoming().diff(existing()).affectedKeys().hasOnly(['likesCount', 'updatedAt'])
+            && (
+              (
+                incoming().likesCount == existing().likesCount + 1
+                && !exists(/databases/$(database)/documents/activities/$(activityId)/likes/$(request.auth.uid))
+                && existsAfter(/databases/$(database)/documents/activities/$(activityId)/likes/$(request.auth.uid))
+              ) ||
+              (
+                incoming().likesCount == existing().likesCount - 1
+                && exists(/databases/$(database)/documents/activities/$(activityId)/likes/$(request.auth.uid))
+                && !existsAfter(/databases/$(database)/documents/activities/$(activityId)/likes/$(request.auth.uid))
+              )
+            )
+          ) ||
+          // Action 3: Comment counter increment/decrement
+          (
+            incoming().diff(existing()).affectedKeys().hasOnly(['commentsCount', 'updatedAt'])
+            && (
+              incoming().commentsCount == existing().commentsCount + 1
+              || incoming().commentsCount == existing().commentsCount - 1
+            )
+          )
+        );
+      allow delete: if isVerifiedUser()
+        && isValidId(activityId)
+        && existing().userId == request.auth.uid;
+
+      // Subcollection: Likes on activity (Master Gate + Atomicity Guarantee)
+      match /likes/{likerId} {
+        allow get: if isVerifiedUser() && isValidId(activityId) && isValidId(likerId)
+          && exists(/databases/$(database)/documents/activities/$(activityId));
+        allow list: if isVerifiedUser() && resource.data.visibility == 'public';
+        allow create: if isOwner(likerId)
+          && isValidId(activityId) && isValidId(likerId)
+          && isValidActivityLike(incoming(), likerId)
+          && incoming().createdAt == request.time
+          && exists(/databases/$(database)/documents/activities/$(activityId))
+          && getAfter(/databases/$(database)/documents/activities/$(activityId)).data.likesCount
+             == get(/databases/$(database)/documents/activities/$(activityId)).data.likesCount + 1;
+        allow update: if false;
+        allow delete: if isOwner(likerId)
+          && isValidId(activityId) && isValidId(likerId)
+          && exists(/databases/$(database)/documents/activities/$(activityId))
+          && getAfter(/databases/$(database)/documents/activities/$(activityId)).data.likesCount
+             == get(/databases/$(database)/documents/activities/$(activityId)).data.likesCount - 1;
+      }
+
+      // Subcollection: Comments on activity (Master Gate + Atomicity Guarantee)
+      match /comments/{commentId} {
+        allow get: if isVerifiedUser() && isValidId(activityId) && isValidId(commentId)
+          && exists(/databases/$(database)/documents/activities/$(activityId));
+        allow list: if isVerifiedUser() && resource.data.visibility == 'public';
+        allow create: if isVerifiedUser()
+          && isValidId(activityId) && isValidId(commentId)
+          && isValidActivityComment(incoming(), commentId)
+          && incoming().createdAt == request.time
+          && exists(/databases/$(database)/documents/activities/$(activityId))
+          && getAfter(/databases/$(database)/documents/activities/$(activityId)).data.commentsCount
+             == get(/databases/$(database)/documents/activities/$(activityId)).data.commentsCount + 1;
+        allow update: if false;
+        allow delete: if isVerifiedUser()
+          && isValidId(activityId) && isValidId(commentId)
+          && existing().userId == request.auth.uid
+          && exists(/databases/$(database)/documents/activities/$(activityId))
+          && getAfter(/databases/$(database)/documents/activities/$(activityId)).data.commentsCount
+             == get(/databases/$(database)/documents/activities/$(activityId)).data.commentsCount - 1;
+      }
+    }
+
+    // ── /exerciseCatalogPacks/{packId} (Public Categorized Exercise Library — NO PII) ──
+    match /exerciseCatalogPacks/{packId} {
+      allow get: if isValidId(packId) && existing().visibility == 'public';
+      allow list: if resource.data.visibility == 'public';
+      allow create: if isVerifiedUser()
+        && isValidId(packId)
+        && isValidExerciseCatalogPack(incoming(), packId)
+        && incoming().updatedAt == request.time;
+      allow update: if isVerifiedUser()
+        && isValidId(packId)
+        && isValidExerciseCatalogPack(incoming(), packId)
+        && incoming().packId == existing().packId
+        && incoming().category == existing().category
+        && incoming().version >= existing().version
+        && incoming().updatedAt == request.time
+        && incoming().diff(existing()).affectedKeys().hasOnly(['version', 'exercises', 'updatedBy', 'updatedAt']);
+      allow delete: if false;
+    }
+  }
+}

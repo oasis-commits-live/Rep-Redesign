@@ -1,0 +1,7 @@
+<?xml version='1.0' encoding='utf-8'?>
+<resources>
+    <string name="app_name">Rep</string>
+    <string name="title_activity_main">Rep</string>
+    <string name="package_name">app.rep.workout</string>
+    <string name="custom_url_scheme">app.rep.workout</string>
+</resources>

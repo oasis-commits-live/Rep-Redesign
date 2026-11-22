@@ -1,0 +1,287 @@
+{
+  "entities": {
+    "UserAccount": {
+      "title": "UserAccount",
+      "description": "Private user account, PII (email), and training preferences. Accessible only by the owning user.",
+      "type": "object",
+      "properties": {
+        "userId": { "type": "string", "minLength": 1, "maxLength": 128, "pattern": "^[a-zA-Z0-9_\\-]+$" },
+        "email": { "type": "string", "format": "email", "maxLength": 254 },
+        "username": { "type": "string", "minLength": 3, "maxLength": 20, "pattern": "^[a-z0-9._]+$" },
+        "displayName": { "type": "string", "minLength": 1, "maxLength": 60 },
+        "avatarUrl": { "type": "string", "maxLength": 2048 },
+        "onboardingComplete": { "type": "boolean" },
+        "preferredStyle": { "type": "string", "enum": ["gym", "calisthenics", "animalflow"] },
+        "workoutFrequency": { "type": "string", "maxLength": 20 },
+        "heightCm": { "type": "number" },
+        "weightKg": { "type": "number" },
+        "goal": { "type": "string", "maxLength": 40 },
+        "createdAt": { "type": "string", "format": "date-time" },
+        "updatedAt": { "type": "string", "format": "date-time" }
+      },
+      "required": ["userId", "email", "username", "displayName", "onboardingComplete", "createdAt", "updatedAt"]
+    },
+    "UsernameClaim": {
+      "title": "UsernameClaim",
+      "description": "Unique username reservation mapping a handle to a userId without exposing PII.",
+      "type": "object",
+      "properties": {
+        "username": { "type": "string", "minLength": 3, "maxLength": 20, "pattern": "^[a-z0-9._]+$" },
+        "userId": { "type": "string", "minLength": 1, "maxLength": 128, "pattern": "^[a-zA-Z0-9_\\-]+$" },
+        "createdAt": { "type": "string", "format": "date-time" }
+      },
+      "required": ["username", "userId", "createdAt"]
+    },
+    "PublicProfile": {
+      "title": "PublicProfile",
+      "description": "Public athlete profile for community discovery and social stats. Contains no PII.",
+      "type": "object",
+      "properties": {
+        "userId": { "type": "string", "minLength": 1, "maxLength": 128, "pattern": "^[a-zA-Z0-9_\\-]+$" },
+        "username": { "type": "string", "minLength": 3, "maxLength": 20, "pattern": "^[a-z0-9._]+$" },
+        "displayName": { "type": "string", "minLength": 1, "maxLength": 60 },
+        "avatarUrl": { "type": "string", "maxLength": 2048 },
+        "preferredStyle": { "type": "string", "enum": ["gym", "calisthenics", "animalflow"] },
+        "bio": { "type": "string", "maxLength": 240 },
+        "visibility": { "type": "string", "enum": ["public"] },
+        "workoutCount": { "type": "number" },
+        "totalVolume": { "type": "number" },
+        "totalDuration": { "type": "number" },
+        "totalSets": { "type": "number" },
+        "totalReps": { "type": "number" },
+        "joinedAt": { "type": "string", "maxLength": 64 },
+        "createdAt": { "type": "string", "format": "date-time" },
+        "updatedAt": { "type": "string", "format": "date-time" }
+      },
+      "required": ["userId", "username", "displayName", "bio", "visibility", "joinedAt", "createdAt", "updatedAt"]
+    },
+    "WorkoutTemplate": {
+      "title": "WorkoutTemplate",
+      "description": "User-owned workout routine template.",
+      "type": "object",
+      "properties": {
+        "id": { "type": "string", "minLength": 1, "maxLength": 128, "pattern": "^[a-zA-Z0-9_\\-]+$" },
+        "userId": { "type": "string", "minLength": 1, "maxLength": 128, "pattern": "^[a-zA-Z0-9_\\-]+$" },
+        "name": { "type": "string", "minLength": 1, "maxLength": 100 },
+        "category": { "type": "string", "enum": ["gym", "calisthenics", "animalflow"] },
+        "exercises": { "type": "array" },
+        "createdAt": { "type": "string", "maxLength": 64 },
+        "updatedAt": { "type": "string", "format": "date-time" }
+      },
+      "required": ["id", "userId", "name", "category", "exercises", "createdAt", "updatedAt"]
+    },
+    "WorkoutSession": {
+      "title": "WorkoutSession",
+      "description": "User-owned logged workout session.",
+      "type": "object",
+      "properties": {
+        "id": { "type": "string", "minLength": 1, "maxLength": 128, "pattern": "^[a-zA-Z0-9_\\-]+$" },
+        "userId": { "type": "string", "minLength": 1, "maxLength": 128, "pattern": "^[a-zA-Z0-9_\\-]+$" },
+        "templateId": { "type": "string", "maxLength": 128 },
+        "name": { "type": "string", "minLength": 1, "maxLength": 100 },
+        "category": { "type": "string", "enum": ["gym", "calisthenics", "animalflow"] },
+        "startedAt": { "type": "string", "maxLength": 64 },
+        "completedAt": { "type": "string", "maxLength": 64 },
+        "exercises": { "type": "array" },
+        "updatedAt": { "type": "string", "format": "date-time" }
+      },
+      "required": ["id", "userId", "name", "category", "startedAt", "exercises", "updatedAt"]
+    },
+    "CustomExercise": {
+      "title": "CustomExercise",
+      "description": "User-created custom exercise definition.",
+      "type": "object",
+      "properties": {
+        "id": { "type": "string", "minLength": 1, "maxLength": 128, "pattern": "^[a-zA-Z0-9_\\-]+$" },
+        "userId": { "type": "string", "minLength": 1, "maxLength": 128, "pattern": "^[a-zA-Z0-9_\\-]+$" },
+        "name": { "type": "string", "minLength": 1, "maxLength": 100 },
+        "category": { "type": "string", "enum": ["gym", "calisthenics", "animalflow"] },
+        "muscleGroup": { "type": "string", "maxLength": 60 },
+        "equipment": { "type": "string", "maxLength": 60 },
+        "isTimeBased": { "type": "boolean" },
+        "instructions": { "type": "string", "maxLength": 1000 },
+        "updatedAt": { "type": "string", "format": "date-time" }
+      },
+      "required": ["id", "userId", "name", "category", "muscleGroup", "updatedAt"]
+    },
+    "SavedTemplate": {
+      "title": "SavedTemplate",
+      "description": "Community template bookmarked by a user.",
+      "type": "object",
+      "properties": {
+        "id": { "type": "string", "minLength": 1, "maxLength": 128, "pattern": "^[a-zA-Z0-9_\\-]+$" },
+        "userId": { "type": "string", "minLength": 1, "maxLength": 128, "pattern": "^[a-zA-Z0-9_\\-]+$" },
+        "originalTemplateId": { "type": "string", "maxLength": 128 },
+        "originalOwnerId": { "type": "string", "maxLength": 128 },
+        "originalOwnerName": { "type": "string", "maxLength": 60 },
+        "originalOwnerAvatar": { "type": "string", "maxLength": 2048 },
+        "templateName": { "type": "string", "minLength": 1, "maxLength": 100 },
+        "category": { "type": "string", "enum": ["gym", "calisthenics", "animalflow"] },
+        "exercises": { "type": "array" },
+        "exerciseCount": { "type": "number" },
+        "savedAt": { "type": "string", "maxLength": 64 },
+        "updatedAt": { "type": "string", "format": "date-time" }
+      },
+      "required": ["id", "userId", "originalTemplateId", "originalOwnerId", "originalOwnerName", "templateName", "category", "exercises", "exerciseCount", "savedAt", "updatedAt"]
+    },
+    "FollowEdge": {
+      "title": "FollowEdge",
+      "description": "Directed social follow relationship between two athletes.",
+      "type": "object",
+      "properties": {
+        "followerId": { "type": "string", "minLength": 1, "maxLength": 128, "pattern": "^[a-zA-Z0-9_\\-]+$" },
+        "followingId": { "type": "string", "minLength": 1, "maxLength": 128, "pattern": "^[a-zA-Z0-9_\\-]+$" },
+        "visibility": { "type": "string", "enum": ["public"] },
+        "createdAt": { "type": "string", "format": "date-time" }
+      },
+      "required": ["followerId", "followingId", "visibility", "createdAt"]
+    },
+    "ActivityPost": {
+      "title": "ActivityPost",
+      "description": "Publicly shared workout activity post in the community feed.",
+      "type": "object",
+      "properties": {
+        "id": { "type": "string", "minLength": 1, "maxLength": 128, "pattern": "^[a-zA-Z0-9_\\-]+$" },
+        "userId": { "type": "string", "minLength": 1, "maxLength": 128, "pattern": "^[a-zA-Z0-9_\\-]+$" },
+        "displayName": { "type": "string", "minLength": 1, "maxLength": 60 },
+        "avatarUrl": { "type": "string", "maxLength": 2048 },
+        "sessionName": { "type": "string", "minLength": 1, "maxLength": 100 },
+        "title": { "type": "string", "maxLength": 120 },
+        "description": { "type": "string", "maxLength": 500 },
+        "category": { "type": "string", "enum": ["gym", "calisthenics", "animalflow"] },
+        "completedAt": { "type": "string", "maxLength": 64 },
+        "exerciseCount": { "type": "number" },
+        "totalSets": { "type": "number" },
+        "totalVolume": { "type": "number" },
+        "durationMinutes": { "type": "number" },
+        "exercises": { "type": "array" },
+        "postedAt": { "type": "string", "maxLength": 64 },
+        "mediaUrl": { "type": "string", "maxLength": 2048 },
+        "visibility": { "type": "string", "enum": ["public"] },
+        "likesCount": { "type": "number" },
+        "commentsCount": { "type": "number" },
+        "createdAt": { "type": "string", "format": "date-time" },
+        "updatedAt": { "type": "string", "format": "date-time" }
+      },
+      "required": ["id", "userId", "displayName", "sessionName", "category", "completedAt", "exerciseCount", "totalSets", "totalVolume", "durationMinutes", "exercises", "postedAt", "visibility", "likesCount", "commentsCount", "createdAt", "updatedAt"]
+    },
+    "ActivityLike": {
+      "title": "ActivityLike",
+      "description": "Single like record on a community activity post.",
+      "type": "object",
+      "properties": {
+        "userId": { "type": "string", "minLength": 1, "maxLength": 128, "pattern": "^[a-zA-Z0-9_\\-]+$" },
+        "displayName": { "type": "string", "minLength": 1, "maxLength": 60 },
+        "avatarUrl": { "type": "string", "maxLength": 2048 },
+        "visibility": { "type": "string", "enum": ["public"] },
+        "createdAt": { "type": "string", "format": "date-time" }
+      },
+      "required": ["userId", "displayName", "visibility", "createdAt"]
+    },
+    "ActivityComment": {
+      "title": "ActivityComment",
+      "description": "Comment on a community activity post.",
+      "type": "object",
+      "properties": {
+        "commentId": { "type": "string", "minLength": 1, "maxLength": 128, "pattern": "^[a-zA-Z0-9_\\-]+$" },
+        "userId": { "type": "string", "minLength": 1, "maxLength": 128, "pattern": "^[a-zA-Z0-9_\\-]+$" },
+        "displayName": { "type": "string", "minLength": 1, "maxLength": 60 },
+        "avatarUrl": { "type": "string", "maxLength": 2048 },
+        "text": { "type": "string", "minLength": 1, "maxLength": 500 },
+        "visibility": { "type": "string", "enum": ["public"] },
+        "createdAt": { "type": "string", "format": "date-time" }
+      },
+      "required": ["commentId", "userId", "displayName", "text", "visibility", "createdAt"]
+    },
+    "NotificationItem": {
+      "title": "NotificationItem",
+      "description": "User notification for likes, comments, and follows.",
+      "type": "object",
+      "properties": {
+        "id": { "type": "string", "minLength": 1, "maxLength": 128, "pattern": "^[a-zA-Z0-9_\\-]+$" },
+        "recipientId": { "type": "string", "minLength": 1, "maxLength": 128, "pattern": "^[a-zA-Z0-9_\\-]+$" },
+        "type": { "type": "string", "enum": ["follow_back", "like", "comment", "app_update"] },
+        "fromUserId": { "type": "string", "minLength": 1, "maxLength": 128, "pattern": "^[a-zA-Z0-9_\\-]+$" },
+        "fromDisplayName": { "type": "string", "maxLength": 60 },
+        "fromAvatarUrl": { "type": "string", "maxLength": 2048 },
+        "activityId": { "type": "string", "maxLength": 128 },
+        "activityName": { "type": "string", "maxLength": 100 },
+        "commentText": { "type": "string", "maxLength": 200 },
+        "title": { "type": "string", "maxLength": 100 },
+        "message": { "type": "string", "maxLength": 240 },
+        "read": { "type": "boolean" },
+        "createdAt": { "type": "string", "format": "date-time" }
+      },
+      "required": ["id", "recipientId", "type", "fromUserId", "read", "createdAt"]
+    },
+    "ExerciseCatalogPack": {
+      "title": "ExerciseCatalogPack",
+      "description": "Public non-PII pack of exercises with form instructions and demonstration frames.",
+      "type": "object",
+      "properties": {
+        "packId": { "type": "string", "minLength": 1, "maxLength": 64, "pattern": "^[a-zA-Z0-9_\\-]+$" },
+        "category": { "type": "string", "enum": ["gym", "calisthenics", "animalflow"] },
+        "version": { "type": "number" },
+        "visibility": { "type": "string", "enum": ["public"] },
+        "exercises": { "type": "array" },
+        "updatedBy": { "type": "string", "minLength": 1, "maxLength": 128 },
+        "updatedAt": { "type": "string", "format": "date-time" }
+      },
+      "required": ["packId", "category", "version", "visibility", "exercises", "updatedBy", "updatedAt"]
+    }
+  },
+  "firestore": {
+    "/users/{userId}": {
+      "schema": { "$ref": "#/entities/UserAccount" },
+      "description": "Private user account, PII email, and preferences."
+    },
+    "/users/{userId}/templates/{templateId}": {
+      "schema": { "$ref": "#/entities/WorkoutTemplate" },
+      "description": "User's private workout templates."
+    },
+    "/users/{userId}/sessions/{sessionId}": {
+      "schema": { "$ref": "#/entities/WorkoutSession" },
+      "description": "User's private workout sessions."
+    },
+    "/users/{userId}/customExercises/{exerciseId}": {
+      "schema": { "$ref": "#/entities/CustomExercise" },
+      "description": "User's private custom exercises."
+    },
+    "/users/{userId}/savedTemplates/{savedId}": {
+      "schema": { "$ref": "#/entities/SavedTemplate" },
+      "description": "User's bookmarked community templates."
+    },
+    "/users/{userId}/notifications/{notificationId}": {
+      "schema": { "$ref": "#/entities/NotificationItem" },
+      "description": "User's inbox of social notifications."
+    },
+    "/usernames/{username}": {
+      "schema": { "$ref": "#/entities/UsernameClaim" },
+      "description": "Global unique username reservations (PII-free)."
+    },
+    "/profiles/{userId}": {
+      "schema": { "$ref": "#/entities/PublicProfile" },
+      "description": "Public athlete profile for community discovery."
+    },
+    "/follows/{followId}": {
+      "schema": { "$ref": "#/entities/FollowEdge" },
+      "description": "Public directed follow relationships."
+    },
+    "/activities/{activityId}": {
+      "schema": { "$ref": "#/entities/ActivityPost" },
+      "description": "Community workout feed activity posts."
+    },
+    "/activities/{activityId}/likes/{likerId}": {
+      "schema": { "$ref": "#/entities/ActivityLike" },
+      "description": "Likes subcollection under an activity post."
+    },
+    "/activities/{activityId}/comments/{commentId}": {
+      "schema": { "$ref": "#/entities/ActivityComment" },
+      "description": "Comments subcollection under an activity post."
+    },
+    "/exerciseCatalogPacks/{packId}": {
+      "schema": { "$ref": "#/entities/ExerciseCatalogPack" },
+      "description": "Public categorized exercise library packs synced in Firestore."
+    }
+  }
+}
